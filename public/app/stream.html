@@ -74,7 +74,6 @@
         <p class="text-muted text-sm mb-3">Scan with your phone to open this page:</p>
         <div id="qr-container" style="background:#fff;border-radius:8px;padding:10px;width:fit-content;margin:0 auto"></div>
         <p class="text-dim mt-2 text-center" id="phone-url" style="word-break:break-all;font-size:11px;font-family:monospace"></p>
-        <p class="mt-2 text-xs" style="color:#ffa000;line-height:1.5">⚠ Camera needs HTTPS on iOS. Run <code style="background:var(--surface2);padding:1px 5px;border-radius:3px">./start-https.sh</code></p>
       </div>
 
       <!-- RTMPS credentials -->
@@ -272,19 +271,14 @@
       document.getElementById('mobile-qr-card').style.display = 'none';
       return;
     }
-    try {
-      const data = await fetch('/api/local-ip').then(r => r.json());
-      const url = `${data.scheme}://${data.ip}:${data.port}/app/stream.html`;
-      document.getElementById('phone-url').textContent = url;
-      new QRCode(document.getElementById('qr-container'), {
-        text: url,
-        width: 140, height: 140,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-      });
-    } catch (_) {
-      document.getElementById('mobile-qr-card').style.display = 'none';
-    }
+    const url = window.location.origin + '/app/stream.html';
+    document.getElementById('phone-url').textContent = url;
+    new QRCode(document.getElementById('qr-container'), {
+      text: url,
+      width: 140, height: 140,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+    });
   }
 
   window.addEventListener('beforeunload', () => broadcaster.destroy());
