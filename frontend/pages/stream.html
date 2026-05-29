@@ -46,10 +46,7 @@
       <div class="card">
         <div class="card-header">Stream Setup</div>
 
-        <div id="no-channel-notice" class="hidden">
-          <p class="text-muted text-sm mb-3">You need a channel to go live.</p>
-          <button class="btn btn-primary w-full" id="create-channel-btn">Create Channel</button>
-        </div>
+        <div id="no-channel-notice" class="hidden"></div>
 
         <div id="channel-info" class="hidden">
           <div class="form-group">
@@ -136,26 +133,42 @@
     pill.style.borderColor = state === 'live' ? 'var(--live)' : 'var(--border)';
   }
 
-  async function loadChannel() {
-    if (!api.isLoggedIn()) { window.location.href = '/app/index.html'; return; }
+  async function ensureGuestSession() {
+    if (api.isLoggedIn()) return;
+    const id = Math.random().toString(36).slice(2, 10);
+    const username = `guest_${id}`;
+    const password = Math.random().toString(36).slice(2, 18);
     try {
-      channel = await api.getMyChannel();
+      await api.register(username, `${username}@guest.local`, password);
+    } catch (_) {}
+    await api.login(username, password);
+  }
+
+  async function loadChannel() {
+    document.getElementById('hint').textContent = 'Setting up your stream...';
+    try {
+      await ensureGuestSession();
+      try {
+        channel = await api.getMyChannel();
+      } catch (e) {
+        if (e.message.includes("don't have a channel")) {
+          channel = await api.createChannel('stream', '');
+        } else {
+          throw e;
+        }
+      }
       document.getElementById('no-channel-notice').classList.add('hidden');
       document.getElementById('channel-info').classList.remove('hidden');
       document.getElementById('channel-name-display').textContent = channel.name;
       document.getElementById('start-btn').disabled = false;
+      document.getElementById('hint').textContent = 'Start your camera to preview before going live.';
 
       streamKeyData = await api.getStreamKey(channel.id);
       rawStreamKey = streamKeyData.stream_key;
       document.getElementById('rtmps-url').textContent = streamKeyData.rtmps_url;
     } catch (e) {
-      if (e.message.includes("don't have a channel")) {
-        document.getElementById('no-channel-notice').classList.remove('hidden');
-        document.getElementById('channel-info').classList.add('hidden');
-        document.getElementById('start-btn').disabled = true;
-      } else {
-        toast('Failed to load channel: ' + e.message, 'error');
-      }
+      document.getElementById('hint').textContent = 'Setup failed: ' + e.message;
+      toast('Setup failed: ' + e.message, 'error');
     }
   }
 
@@ -233,22 +246,6 @@
   };
 
   document.getElementById('flip-btn').onclick = () => broadcaster.flipCamera(previewEl);
-
-  document.getElementById('create-channel-btn').onclick = async () => {
-    const name = prompt('Channel name:');
-    if (!name) return;
-    const btn = document.getElementById('create-channel-btn');
-    btn.disabled = true; btn.textContent = 'Creating...';
-    try {
-      channel = await api.createChannel(name);
-      toast('Channel created!', 'success');
-      loadChannel();
-    } catch (e) {
-      toast(e.message, 'error');
-    } finally {
-      btn.disabled = false; btn.textContent = 'Create Channel';
-    }
-  };
 
   document.getElementById('reveal-key').onclick = () => {
     keyRevealed = !keyRevealed;
