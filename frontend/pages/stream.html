@@ -76,6 +76,16 @@
         <p class="text-dim mt-2 text-center" id="phone-url" style="word-break:break-all;font-size:11px;font-family:monospace"></p>
       </div>
 
+      <!-- Watch link -->
+      <div class="card hidden" id="watch-link-card">
+        <div class="card-header">🔗 Share with Viewers</div>
+        <p class="text-muted text-sm mb-3">Send this link to people who want to watch:</p>
+        <div class="key-box">
+          <a id="watch-link" href="#" target="_blank" class="key-value" style="font-size:11px;word-break:break-all;color:var(--primary-light)"></a>
+          <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('watch-link').href).then(()=>toast('Copied!','success'))">Copy</button>
+        </div>
+      </div>
+
       <!-- RTMPS credentials -->
       <div class="card">
         <div class="card-header">OBS / Mobile Apps</div>
@@ -152,6 +162,12 @@
       document.getElementById('start-btn').disabled = false;
       document.getElementById('hint').textContent = 'Start your camera to preview before going live.';
       document.getElementById('rtmps-url').textContent = data.rtmps_url;
+
+      // show shareable watch link
+      const watchUrl = `${location.origin}/app/watch.html?playback=${encodeURIComponent(data.playback_url)}`;
+      document.getElementById('watch-link').href = watchUrl;
+      document.getElementById('watch-link').textContent = watchUrl;
+      document.getElementById('watch-link-card').classList.remove('hidden');
 
       // save ingest endpoint for broadcaster
       window._ingestEndpoint = data.ingest_endpoint;

@@ -120,6 +120,23 @@
   }
 
   async function initPage() {
+    const directPlayback = params.get('playback');
+
+    // Direct playback URL — no DB needed (guest streams)
+    if (directPlayback) {
+      document.title = 'Live Stream — StreamSpace';
+      document.getElementById('channel-name').textContent = 'Live Stream';
+      document.getElementById('channel-desc').textContent = '';
+      document.getElementById('streamer-avatar').textContent = '📡';
+      document.getElementById('streamer-avatar').style.background = 'var(--gradient)';
+      document.getElementById('live-badge').className = 'badge-live';
+      document.getElementById('live-badge').textContent = 'LIVE';
+      document.getElementById('offline-overlay').style.display = 'none';
+      document.getElementById('chat-messages').innerHTML = '<div class="chat-msg system">Chat not available for guest streams</div>';
+      initPlayer(directPlayback);
+      return;
+    }
+
     if (!channelId) { location.href = '/app/index.html'; return; }
 
     try {
