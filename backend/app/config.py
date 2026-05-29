@@ -14,6 +14,12 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:8080,http://localhost:3000"
 
+    # Pre-provisioned IVS channel — set these to skip CreateChannel on every request
+    ivs_channel_arn: str = ""
+    ivs_ingest_endpoint: str = ""
+    ivs_stream_key: str = ""
+    ivs_playback_url: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

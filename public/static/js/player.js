@@ -14,7 +14,6 @@ class IVSPlayerManager {
     this.player = window.IVSPlayer.create();
     this.player.attachHTMLVideoElement(this.videoEl);
     this.player.setLiveLowLatencyEnabled(true);
-    this.player.setMaximumBufferDuration(3);
 
     this.player.addEventListener(window.IVSPlayer.PlayerState.PLAYING, () => {
       this._onStateChange('playing');
