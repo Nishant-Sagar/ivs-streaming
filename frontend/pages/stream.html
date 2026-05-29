@@ -132,39 +132,29 @@
     pill.style.borderColor = state === 'live' ? 'var(--live)' : 'var(--border)';
   }
 
-  async function ensureGuestSession() {
-    if (api.isLoggedIn()) return;
-    const id = Math.random().toString(36).slice(2, 10);
-    const username = `guest_${id}`;
-    const password = Math.random().toString(36).slice(2, 18);
-    try {
-      await api.register(username, `${username}@guest.local`, password);
-    } catch (_) {}
-    await api.login(username, password);
-  }
+  let guestChannelArn = null;
 
   async function loadChannel() {
     document.getElementById('hint').textContent = 'Setting up your stream...';
     try {
-      await ensureGuestSession();
-      try {
-        channel = await api.getMyChannel();
-      } catch (e) {
-        if (e.message.includes("don't have a channel")) {
-          channel = await api.createChannel('stream', '');
-        } else {
-          throw e;
-        }
+      const res = await fetch('/api/streams/guest', { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
       }
+      const data = await res.json();
+      guestChannelArn = data.channel_arn;
+      rawStreamKey = data.stream_key;
+
       document.getElementById('no-channel-notice').classList.add('hidden');
       document.getElementById('channel-info').classList.remove('hidden');
-      document.getElementById('channel-name-display').textContent = channel.name;
+      document.getElementById('channel-name-display').textContent = 'Your Stream';
       document.getElementById('start-btn').disabled = false;
       document.getElementById('hint').textContent = 'Start your camera to preview before going live.';
+      document.getElementById('rtmps-url').textContent = data.rtmps_url;
 
-      streamKeyData = await api.getStreamKey(channel.id);
-      rawStreamKey = streamKeyData.stream_key;
-      document.getElementById('rtmps-url').textContent = streamKeyData.rtmps_url;
+      // save ingest endpoint for broadcaster
+      window._ingestEndpoint = data.ingest_endpoint;
     } catch (e) {
       document.getElementById('hint').textContent = 'Setup failed: ' + e.message;
       toast('Setup failed: ' + e.message, 'error');
@@ -192,7 +182,7 @@
     btn.disabled = true; btn.textContent = 'Setting up...';
     setStatus('connecting');
     try {
-      await broadcaster.setup(previewEl, streamKeyData.ingest_endpoint);
+      await broadcaster.setup(previewEl, window._ingestEndpoint);
       await populateDevices();
 
       broadcaster.onStatusChange = (state) => {
@@ -223,8 +213,6 @@
     if (goLiveBtn) { goLiveBtn.disabled = true; goLiveBtn.textContent = 'Connecting...'; }
     setStatus('connecting');
     try {
-      const desc = document.getElementById('stream-title').value.trim();
-      if (desc) await api.updateChannel(channel.id, { description: desc }).catch(() => {});
       await broadcaster.startBroadcast(rawStreamKey);
       if (goLiveBtn) goLiveBtn.classList.add('hidden');
       setStatus('live');
@@ -238,7 +226,9 @@
 
   document.getElementById('stop-btn').onclick = async () => {
     await broadcaster.stopBroadcast();
-    await api.stopStream(channel.id).catch(() => {});
+    if (guestChannelArn) {
+      fetch(`/api/streams/guest/${encodeURIComponent(guestChannelArn)}`, { method: 'DELETE' }).catch(() => {});
+    }
     setStatus('');
     toast('Stream ended');
     location.reload();
