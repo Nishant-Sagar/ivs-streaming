@@ -33,6 +33,8 @@ def create_channel(
         chat_data = ivs_chat_service.create_room(name=f"chat-{current_user.username}")
     except ClientError as e:
         raise AWSError(f"Failed to create IVS resources: {e.response['Error']['Message']}")
+    except Exception as e:
+        raise AWSError(f"Failed to create IVS resources: {e}")
 
     channel = Channel(
         owner_id=current_user.id,
