@@ -34,28 +34,13 @@ app.include_router(streams.router)
 app.include_router(webhooks.router)
 
 # Serve frontend static files if the directory exists
+# Note: directory is named "pages" (not "public") — Vercel excludes "public/" from function bundles
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
 if os.path.isdir(os.path.join(frontend_path, "static")):
     app.mount("/static", StaticFiles(directory=os.path.join(frontend_path, "static")), name="static")
 
-if os.path.isdir(os.path.join(frontend_path, "public")):
-    app.mount("/app", StaticFiles(directory=os.path.join(frontend_path, "public"), html=True), name="frontend")
-
-
-@app.get("/api/debug-paths")
-def debug_paths():
-    here = os.path.dirname(os.path.abspath(__file__))
-    fp = os.path.join(here, "..", "..", "frontend")
-    fp_abs = os.path.abspath(fp)
-    return {
-        "cwd": os.getcwd(),
-        "here": here,
-        "frontend_path": fp_abs,
-        "frontend_exists": os.path.isdir(fp_abs),
-        "public_exists": os.path.isdir(os.path.join(fp_abs, "public")),
-        "static_exists": os.path.isdir(os.path.join(fp_abs, "static")),
-        "cwd_listing": os.listdir(os.getcwd()),
-    }
+if os.path.isdir(os.path.join(frontend_path, "pages")):
+    app.mount("/app", StaticFiles(directory=os.path.join(frontend_path, "pages")), name="frontend")
 
 
 @app.get("/api/local-ip")
