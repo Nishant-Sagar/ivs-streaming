@@ -16,7 +16,7 @@ class IVSService:
                 region_name=settings.aws_region,
                 aws_access_key_id=settings.aws_access_key_id,
                 aws_secret_access_key=settings.aws_secret_access_key,
-                endpoint_url=f"https://ivs.{settings.aws_region}.amazonaws.com",
+                endpoint_url=f"https://ivs.{settings.aws_region.strip()}.amazonaws.com",
             )
         return self._client
 
