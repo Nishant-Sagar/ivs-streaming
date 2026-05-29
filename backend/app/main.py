@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 import os
 import socket
 
@@ -63,4 +63,4 @@ def health_check():
 
 @app.get("/")
 def root():
-    return {"message": "IVS Streaming API", "docs": "/api/docs"}
+    return RedirectResponse(url="/app/index.html")
