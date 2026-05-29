@@ -26,8 +26,8 @@ class IVSBroadcaster {
     if (!IVSBroadcastClient) throw new Error('IVS Web Broadcast SDK not loaded');
 
     const streamConfig = this.isMobile
-      ? IVSBroadcastClient.STANDARD_PORTRAIT
-      : IVSBroadcastClient.STANDARD_LANDSCAPE;
+      ? IVSBroadcastClient.BASIC_PORTRAIT
+      : IVSBroadcastClient.BASIC_LANDSCAPE;
 
     this.client = IVSBroadcastClient.create({
       streamConfig,

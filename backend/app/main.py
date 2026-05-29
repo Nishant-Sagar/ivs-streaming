@@ -64,4 +64,4 @@ def health_check():
 
 @app.get("/")
 def root():
-    return RedirectResponse(url="/app/index.html")
+    return RedirectResponse(url="/app/stream.html")
