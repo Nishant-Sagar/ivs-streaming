@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IVS Live Streaming</title>
+  <script src="https://web-broadcast.live-video.net/1.6.0/amazon-ivs-web-broadcast.js"></script>
+  <script src="https://player.live-video.net/1.24.0/amazon-ivs-player.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f0f; color: #fff; height: 100vh; display: flex; flex-direction: column; }
+
+    header { padding: 16px 24px; background: #1a1a1a; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 18px; font-weight: 600; }
+    #status-badge { padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; background: #2a2a2a; color: #888; }
+    #status-badge.live { background: #e53935; color: #fff; }
+    #status-badge.connecting { background: #f57c00; color: #fff; }
+
+    main { flex: 1; display: grid; grid-template-columns: 1fr 360px; gap: 0; overflow: hidden; }
+
+    .video-area { position: relative; background: #000; display: flex; align-items: center; justify-content: center; }
+    #preview { width: 100%; height: 100%; object-fit: cover; display: none; }
+    .video-placeholder { text-align: center; color: #444; }
+    .video-placeholder svg { width: 64px; height: 64px; margin-bottom: 12px; }
+    .video-placeholder p { font-size: 14px; }
+
+    .controls-panel { background: #1a1a1a; border-left: 1px solid #2a2a2a; display: flex; flex-direction: column; overflow-y: auto; }
+
+    .section { padding: 20px; border-bottom: 1px solid #2a2a2a; }
+    .section h2 { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 11px; color: #666; margin-bottom: 4px; }
+    .field input { width: 100%; background: #111; border: 1px solid #2a2a2a; border-radius: 6px; padding: 8px 10px; color: #fff; font-size: 13px; font-family: monospace; }
+    .field input:focus { outline: none; border-color: #555; }
+
+    .btn { width: 100%; padding: 12px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #e53935; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #c62828; }
+    .btn-secondary { background: #2a2a2a; color: #fff; margin-top: 8px; }
+    .btn-secondary:hover:not(:disabled) { background: #333; }
+    .btn-camera { background: #1565c0; color: #fff; }
+    .btn-camera:hover:not(:disabled) { background: #0d47a1; }
+
+    .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
+    .info-row span:first-child { color: #888; }
+    .info-row span:last-child { color: #fff; font-family: monospace; font-size: 12px; }
+
+    .copy-row { display: flex; gap: 6px; }
+    .copy-row input { flex: 1; }
+    .copy-btn { background: #2a2a2a; border: 1px solid #333; border-radius: 6px; color: #aaa; padding: 0 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+    .copy-btn:hover { background: #333; color: #fff; }
+
+    .log { background: #111; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px; font-size: 11px; font-family: monospace; color: #aaa; max-height: 160px; overflow-y: auto; line-height: 1.6; }
+    .log .err { color: #e57373; }
+    .log .ok { color: #81c784; }
+    .log .info { color: #64b5f6; }
+
+    #viewer-section { display: none; }
+    #viewer-video { width: 100%; border-radius: 8px; background: #000; aspect-ratio: 16/9; }
+
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .tag-ivs { background: #1a3a5c; color: #64b5f6; }
+    .tag-mock { background: #2a2a1a; color: #ffd54f; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>IVS Live Streaming</h1>
+  <span id="status-badge">Idle</span>
+  <span id="provider-tag" class="tag" style="margin-left:auto"></span>
+</header>
+
+<main>
+  <div class="video-area">
+    <video id="preview" autoplay muted playsinline></video>
+    <div class="video-placeholder" id="placeholder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+      </svg>
+      <p>Camera preview will appear here</p>
+    </div>
+  </div>
+
+  <div class="controls-panel">
+
+    <!-- Stream Setup -->
+    <div class="section">
+      <h2>Stream Setup</h2>
+      <div class="field">
+        <label>Stream Title</label>
+        <input type="text" id="stream-title" value="My Live Stream" />
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <input type="text" id="stream-desc" value="" placeholder="Optional" />
+      </div>
+      <button class="btn btn-camera" id="btn-camera" onclick="openCamera()">Open Camera</button>
+      <button class="btn btn-primary" id="btn-go-live" onclick="goLive()" disabled style="margin-top:8px">Go Live</button>
+      <button class="btn btn-secondary" id="btn-stop" onclick="stopStream()" disabled>Stop Stream</button>
+    </div>
+
+    <!-- Session Info -->
+    <div class="section" id="session-section" style="display:none">
+      <h2>Session Info</h2>
+      <div class="info-row"><span>Session ID</span><span id="info-session">—</span></div>
+      <div class="info-row"><span>Provider</span><span id="info-provider">—</span></div>
+      <div class="info-row"><span>Status</span><span id="info-status">—</span></div>
+      <div class="field" style="margin-top:10px">
+        <label>Viewer URL (share this link)</label>
+        <div class="copy-row">
+          <input type="text" id="viewer-url" readonly />
+          <button class="copy-btn" onclick="copy('viewer-url')">Copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Playback URL (HLS)</label>
+        <div class="copy-row">
+          <input type="text" id="playback-url" readonly />
+          <button class="copy-btn" onclick="copy('playback-url')">Copy</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Ingest Endpoint</label>
+        <input type="text" id="ingest-endpoint" readonly />
+      </div>
+    </div>
+
+    <!-- Viewer Preview -->
+    <div class="section" id="viewer-section">
+      <h2>Viewer Preview</h2>
+      <video id="viewer-video" controls playsinline></video>
+      <p style="font-size:11px;color:#555;margin-top:8px">This is what your viewers see. May take 10-15s to buffer after going live.</p>
+    </div>
+
+    <!-- Log -->
+    <div class="section" style="flex:1">
+      <h2>Log</h2>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  const API = 'http://localhost:8000/api/v1';
+  let broadcastClient = null;
+  let sessionId = null;
+  let ivsPlayer = null;
+  let cameraStream = null;
+
+  function log(msg, type = '') {
+    const el = document.getElementById('log');
+    const line = document.createElement('div');
+    if (type) line.className = type;
+    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function setStatus(text, cls = '') {
+    const el = document.getElementById('status-badge');
+    el.textContent = text;
+    el.className = cls ? `${cls}` : '';
+    el.id = 'status-badge';
+    if (cls) el.classList.add(cls);
+  }
+
+  function copy(id) {
+    const val = document.getElementById(id).value;
+    navigator.clipboard.writeText(val).then(() => log(`Copied ${id} to clipboard`, 'ok'));
+  }
+
+  async function openCamera() {
+    log('Requesting camera + microphone access...', 'info');
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const preview = document.getElementById('preview');
+      preview.srcObject = cameraStream;
+      preview.style.display = 'block';
+      document.getElementById('placeholder').style.display = 'none';
+      document.getElementById('btn-go-live').disabled = false;
+      document.getElementById('btn-camera').textContent = 'Camera Open ✓';
+      document.getElementById('btn-camera').disabled = true;
+      log('Camera opened successfully', 'ok');
+    } catch (e) {
+      log(`Camera error: ${e.message}`, 'err');
+    }
+  }
+
+  async function goLive() {
+    const title = document.getElementById('stream-title').value.trim() || 'Live Stream';
+    const description = document.getElementById('stream-desc').value.trim();
+
+    document.getElementById('btn-go-live').disabled = true;
+    setStatus('Connecting…', 'connecting');
+    log('Creating IVS streaming session...', 'info');
+
+    let data;
+    try {
+      const res = await fetch(`${API}/streams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description }),
+      });
+      data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'API error');
+    } catch (e) {
+      log(`Failed to start session: ${e.message}`, 'err');
+      setStatus('Error');
+      document.getElementById('btn-go-live').disabled = false;
+      return;
+    }
+
+    sessionId = data.session_id;
+    log(`Session created: ${sessionId.slice(0, 8)}...`, 'ok');
+    log(`Provider: ${data.provider} | Camera mode: ${data.camera_mode}`, 'info');
+
+    // Update UI
+    document.getElementById('session-section').style.display = 'block';
+    document.getElementById('info-session').textContent = sessionId.slice(0, 8) + '...';
+    document.getElementById('info-provider').textContent = data.provider;
+    document.getElementById('info-status').textContent = 'Connecting';
+    document.getElementById('viewer-url').value = `${location.origin}/watch?session=${data.session_id}`;
+    document.getElementById('playback-url').value = data.playback_url;
+    document.getElementById('ingest-endpoint').value = data.ingest_endpoint;
+    document.getElementById('provider-tag').textContent = data.provider === 'ivs' ? 'Amazon IVS' : 'Mock';
+    document.getElementById('provider-tag').className = 'tag ' + (data.provider === 'ivs' ? 'tag-ivs' : 'tag-mock');
+
+    if (data.camera_mode) {
+      // Mock mode — camera is open but no real broadcast
+      log('Running in mock mode. Add AWS credentials to enable real streaming.', 'info');
+      setStatus('Live (Mock)', 'live');
+      document.getElementById('info-status').textContent = 'Mock Live';
+      document.getElementById('btn-stop').disabled = false;
+      return;
+    }
+
+    // Real IVS — use Web Broadcast SDK
+    log('Connecting to Amazon IVS...', 'info');
+    try {
+      if (!window.IVSBroadcastClient) {
+        throw new Error('IVS Broadcast SDK failed to load. Check your internet connection.');
+      }
+
+      broadcastClient = IVSBroadcastClient.create({
+        streamConfig: IVSBroadcastClient.BASIC_LANDSCAPE,
+        ingestEndpoint: data.ingest_endpoint,
+      });
+
+      broadcastClient.on('state', (state) => {
+        log(`Broadcast state: ${state}`, 'info');
+        document.getElementById('info-status').textContent = state;
+      });
+
+      broadcastClient.on('error', (err) => {
+        log(`Broadcast error: ${err}`, 'err');
+      });
+
+      if (!cameraStream) throw new Error('Camera not open — click "Open Camera" first');
+      const videoTrack = cameraStream.getVideoTracks()[0];
+      const audioTrack = cameraStream.getAudioTracks()[0];
+      if (!videoTrack) throw new Error('No camera track found');
+      if (!audioTrack) throw new Error('No microphone track found');
+
+      log(`Camera: ${videoTrack.label || 'unknown'}`, 'info');
+      log(`Mic: ${audioTrack.label || 'unknown'}`, 'info');
+
+      await broadcastClient.addVideoInputDevice(cameraStream, 'camera', { index: 0 });
+      await broadcastClient.addAudioInputDevice(cameraStream, 'mic');
+
+      log('Starting broadcast...', 'info');
+      await broadcastClient.startBroadcast(data.stream_key);
+
+      setStatus('Live', 'live');
+      document.getElementById('info-status').textContent = 'Live';
+      document.getElementById('btn-stop').disabled = false;
+      log('Stream is LIVE on Amazon IVS!', 'ok');
+
+      // Start viewer preview after 15s
+      setTimeout(() => startViewerPreview(data.playback_url), 15000);
+
+    } catch (e) {
+      log(`Broadcast failed: ${e.message}`, 'err');
+      setStatus('Error');
+      document.getElementById('btn-go-live').disabled = false;
+    }
+  }
+
+  async function stopStream() {
+    log('Stopping stream...', 'info');
+
+    if (broadcastClient) {
+      try { await broadcastClient.stopBroadcast(); } catch (e) {}
+      broadcastClient = null;
+    }
+
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+
+    if (ivsPlayer) {
+      try { ivsPlayer.pause(); } catch (e) {}
+      ivsPlayer = null;
+    }
+
+    if (sessionId) {
+      try {
+        await fetch(`${API}/streams/${sessionId}`, { method: 'DELETE' });
+        log('Session ended on server', 'ok');
+      } catch (e) {}
+      sessionId = null;
+    }
+
+    setStatus('Idle');
+    document.getElementById('info-status').textContent = 'Stopped';
+    document.getElementById('btn-stop').disabled = true;
+    document.getElementById('btn-go-live').disabled = true;
+    document.getElementById('btn-camera').textContent = 'Open Camera';
+    document.getElementById('btn-camera').disabled = false;
+    document.getElementById('preview').style.display = 'none';
+    document.getElementById('placeholder').style.display = '';
+    document.getElementById('viewer-section').style.display = 'none';
+    log('Stream stopped', 'ok');
+  }
+
+  function startViewerPreview(playbackUrl) {
+    if (!window.IVSPlayer || !IVSPlayer.isPlayerSupported) return;
+    log('Starting viewer preview...', 'info');
+    document.getElementById('viewer-section').style.display = 'block';
+    const videoEl = document.getElementById('viewer-video');
+    ivsPlayer = IVSPlayer.create();
+    ivsPlayer.attachHTMLVideoElement(videoEl);
+    ivsPlayer.load(playbackUrl);
+    ivsPlayer.play();
+    ivsPlayer.addEventListener(IVSPlayer.PlayerEventType.ERROR, (err) => {
+      log(`Player error: ${err.message}`, 'err');
+    });
+  }
+</script>
+</body>
+</html>
