@@ -29,7 +29,8 @@ def create_channel(
         raise ConflictError("You already have a channel. Delete it first to create a new one.")
 
     try:
-        ivs_data = ivs_service.create_channel(name=f"{current_user.username}-{channel_data.name}")
+        safe_name = f"{current_user.username}-{channel_data.name}".replace(" ", "-")
+        ivs_data = ivs_service.create_channel(name=safe_name)
         chat_data = ivs_chat_service.create_room(name=f"chat-{current_user.username}")
     except ClientError as e:
         raise AWSError(f"Failed to create IVS resources: {e.response['Error']['Message']}")
