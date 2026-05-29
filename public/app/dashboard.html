@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — StreamSpace</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/app/index.html">⚡ StreamSpace</a>
+  <div class="nav-links">
+    <a href="/app/stream.html" class="btn btn-primary btn-sm">🎙 Go Live</a>
+    <div class="nav-user" id="nav-user" style="display:none">
+      <div class="nav-avatar" id="nav-avatar">?</div>
+      <span id="nav-username"></span>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="logout-btn">Logout</button>
+  </div>
+</nav>
+
+<div class="container page">
+
+  <!-- No channel -->
+  <div id="no-channel" class="hidden" style="max-width:480px;margin:0 auto;padding-top:40px">
+    <div class="card">
+      <div class="card-header">Create Your Channel</div>
+      <p class="text-muted text-sm mb-4" style="line-height:1.6">Set up your channel to start streaming. IVS will provision a dedicated ingest endpoint and stream key for you.</p>
+      <div class="form-group">
+        <label class="form-label">Channel Name</label>
+        <input class="form-input" id="new-channel-name" type="text" placeholder="My Awesome Stream">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input class="form-input" id="new-channel-desc" type="text" placeholder="What will you stream?">
+      </div>
+      <button class="btn btn-primary w-full" id="create-channel-btn" style="margin-top:4px">Create Channel</button>
+    </div>
+  </div>
+
+  <!-- Channel dashboard -->
+  <div id="channel-dashboard" class="hidden">
+
+    <!-- Stats row -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-live">—</div>
+        <div class="stat-label">Status</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-viewers">0</div>
+        <div class="stat-label">Viewers</div>
+      </div>
+    </div>
+
+    <!-- Main grid -->
+    <div class="dash-grid">
+
+      <!-- Channel Settings -->
+      <div class="card">
+        <div class="card-header">Channel Settings</div>
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input class="form-input" id="edit-name" type="text">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <input class="form-input" id="edit-desc" type="text" placeholder="What are you streaming?">
+        </div>
+        <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" id="save-channel-btn">Save Changes</button>
+          <button class="btn btn-danger btn-sm" id="delete-channel-btn">Delete Channel</button>
+        </div>
+      </div>
+
+      <!-- Stream Credentials -->
+      <div class="card">
+        <div class="card-header">Stream Credentials</div>
+        <div class="form-group">
+          <label class="form-label">RTMPS Ingest URL</label>
+          <div class="key-box">
+            <span class="key-value" id="ingest-url">—</span>
+            <button class="btn btn-ghost btn-sm" onclick="copyField('ingest-url')">Copy</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stream Key</label>
+          <div class="key-box">
+            <span class="key-value" id="stream-key">••••••••</span>
+            <button class="btn btn-ghost btn-sm" id="toggle-key">Show</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyRawKey()">Copy</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Playback URL</label>
+          <div class="key-box">
+            <span class="key-value" id="playback-url" style="font-size:11px">—</span>
+            <button class="btn btn-ghost btn-sm" onclick="copyField('playback-url')">Copy</button>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm mt-3" id="rotate-key-btn">🔄 Rotate Stream Key</button>
+      </div>
+
+    </div>
+
+    <!-- Stream controls (only when live) -->
+    <div class="card mt-4 hidden" id="stream-actions-card">
+      <div class="card-header">Stream Controls</div>
+      <div class="flex gap-2" style="flex-wrap:wrap">
+        <a href="/app/stream.html" class="btn btn-primary">📷 Go Live from Browser</a>
+        <button class="btn btn-danger" id="stop-stream-btn">⏹ Stop Stream</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="/static/js/api.js"></script>
+<script>
+  let channel = null;
+  let rawStreamKey = '';
+  let keyRevealed = false;
+
+  function toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    setTimeout(() => el.className = '', 3500);
+  }
+
+  function copyField(id) {
+    navigator.clipboard.writeText(document.getElementById(id).textContent)
+      .then(() => toast('Copied!', 'success'));
+  }
+
+  function copyRawKey() {
+    navigator.clipboard.writeText(rawStreamKey).then(() => toast('Stream key copied!', 'success'));
+  }
+
+  async function loadDashboard() {
+    if (!api.isLoggedIn()) { location.href = '/app/index.html'; return; }
+
+    const user = api.getUser();
+    if (user) {
+      document.getElementById('nav-user').style.display = 'flex';
+      document.getElementById('nav-avatar').textContent = user.username[0].toUpperCase();
+      document.getElementById('nav-username').textContent = user.username;
+    }
+
+    try {
+      channel = await api.getMyChannel();
+      showChannelDashboard();
+      await Promise.all([loadStreamStatus(), loadStreamKey()]);
+    } catch (e) {
+      if (e.message.includes("don't have a channel")) {
+        document.getElementById('no-channel').classList.remove('hidden');
+      } else {
+        toast(e.message, 'error');
+      }
+    }
+  }
+
+  function showChannelDashboard() {
+    document.getElementById('no-channel').classList.add('hidden');
+    document.getElementById('channel-dashboard').classList.remove('hidden');
+    document.getElementById('edit-name').value = channel.name;
+    document.getElementById('edit-desc').value = channel.description || '';
+    document.getElementById('playback-url').textContent = channel.ivs_playback_url || '—';
+  }
+
+  async function loadStreamStatus() {
+    const status = await api.getStreamStatus(channel.id);
+    document.getElementById('stat-live').textContent = status.is_live ? '🔴 LIVE' : '⚫ Offline';
+    document.getElementById('stat-viewers').textContent = status.viewer_count ?? 0;
+    document.getElementById('stream-actions-card').classList.toggle('hidden', !status.is_live);
+  }
+
+  async function loadStreamKey() {
+    const keyData = await api.getStreamKey(channel.id);
+    rawStreamKey = keyData.stream_key;
+    document.getElementById('ingest-url').textContent = keyData.rtmps_url;
+  }
+
+  document.getElementById('create-channel-btn').onclick = async () => {
+    const name = document.getElementById('new-channel-name').value.trim();
+    const desc = document.getElementById('new-channel-desc').value.trim();
+    if (!name) { toast('Channel name is required', 'error'); return; }
+    const btn = document.getElementById('create-channel-btn');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      channel = await api.createChannel(name, desc);
+      toast('Channel created!', 'success');
+      showChannelDashboard();
+      loadStreamKey();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Channel';
+    }
+  };
+
+  document.getElementById('save-channel-btn').onclick = async () => {
+    const btn = document.getElementById('save-channel-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    try {
+      await api.updateChannel(channel.id, {
+        name: document.getElementById('edit-name').value,
+        description: document.getElementById('edit-desc').value,
+      });
+      toast('Saved!', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save Changes';
+    }
+  };
+
+  document.getElementById('delete-channel-btn').onclick = async () => {
+    if (!confirm('Delete your channel? This permanently removes your IVS channel and chat room.')) return;
+    try {
+      await api.deleteChannel(channel.id);
+      toast('Channel deleted', 'success');
+      location.reload();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  document.getElementById('rotate-key-btn').onclick = async () => {
+    if (!confirm('Rotate stream key? Your current key will stop working immediately.')) return;
+    const btn = document.getElementById('rotate-key-btn');
+    btn.disabled = true;
+    try {
+      const keyData = await api.rotateStreamKey(channel.id);
+      rawStreamKey = keyData.stream_key;
+      if (keyRevealed) document.getElementById('stream-key').textContent = rawStreamKey;
+      toast('Stream key rotated!', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  document.getElementById('stop-stream-btn').onclick = async () => {
+    try {
+      await api.stopStream(channel.id);
+      toast('Stream stopped');
+      await loadStreamStatus();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  document.getElementById('toggle-key').onclick = () => {
+    keyRevealed = !keyRevealed;
+    document.getElementById('stream-key').textContent = keyRevealed ? rawStreamKey : '••••••••';
+    document.getElementById('toggle-key').textContent = keyRevealed ? 'Hide' : 'Show';
+  };
+
+  document.getElementById('logout-btn').onclick = () => api.logout();
+
+  loadDashboard();
+  setInterval(loadStreamStatus, 30000);
+</script>
+</body>
+</html>

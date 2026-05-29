@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamSpace — Watch Live</title>
+  <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/app/index.html">⚡ StreamSpace</a>
+  <div class="nav-links" id="nav-links">
+    <a href="/app/stream.html" class="btn btn-primary btn-sm" id="go-live-btn">Go Live</a>
+    <div class="nav-user hidden" id="nav-user">
+      <div class="nav-avatar" id="nav-avatar">?</div>
+      <span id="nav-username"></span>
+    </div>
+    <button class="btn btn-ghost btn-sm hidden" id="logout-btn">Logout</button>
+    <button class="btn btn-ghost btn-sm" id="login-btn">Sign In</button>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="container">
+    <div class="hero-title">Watch, Stream,<br><span>Go Live.</span></div>
+    <p class="hero-sub">Discover live streams and creators broadcasting right now.</p>
+  </div>
+</div>
+
+<div class="container page">
+  <div class="section-header">
+    <div class="section-title">Browse Channels</div>
+    <div class="filter-bar">
+      <button class="filter-btn active" id="filter-all">All</button>
+      <button class="filter-btn" id="filter-live">🔴 Live Now</button>
+    </div>
+  </div>
+
+  <div id="channel-grid" class="channel-grid">
+    <div class="empty-state">
+      <div class="empty-icon">📡</div>
+      <div class="empty-title">Loading channels...</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="auth-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-brand">
+      <div class="modal-brand-logo">⚡ StreamSpace</div>
+      <div class="modal-brand-sub">Join the community</div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" id="tab-login" onclick="switchTab('login')">Sign In</div>
+      <div class="tab" id="tab-register" onclick="switchTab('register')">Register</div>
+    </div>
+    <div id="form-login">
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="login-username" type="text" placeholder="your_username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="login-password" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary w-full" id="do-login" style="margin-top:4px">Sign In</button>
+    </div>
+    <div id="form-register" class="hidden">
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="reg-username" type="text" placeholder="your_username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="reg-email" type="email" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="reg-password" type="password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary w-full" id="do-register" style="margin-top:4px">Create Account</button>
+    </div>
+    <div class="divider"></div>
+    <button class="btn btn-ghost btn-sm w-full" onclick="closeModal()">Cancel</button>
+  </div>
+</div>
+
+<script src="/static/js/api.js"></script>
+<script>
+  let showingLive = false;
+
+  const GRADIENTS = [
+    ['#9147ff','#e040fb'],['#00b4d8','#48cae4'],['#f72585','#b5179e'],
+    ['#06d6a0','#118ab2'],['#ffd166','#ef476f'],['#e63946','#457b9d'],
+    ['#7209b7','#3a0ca3'],['#f77f00','#fcbf49'],
+  ];
+
+  function channelGradient(name) {
+    let h = 0;
+    for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) & 0x7fffffff;
+    const [c1, c2] = GRADIENTS[h % GRADIENTS.length];
+    return `linear-gradient(135deg, ${c1}, ${c2})`;
+  }
+
+  function toast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    setTimeout(() => el.className = '', 3200);
+  }
+
+  function updateNav() {
+    const user = api.getUser();
+    const loggedIn = api.isLoggedIn();
+    document.getElementById('logout-btn').classList.toggle('hidden', !loggedIn);
+    document.getElementById('login-btn').classList.toggle('hidden', loggedIn);
+    document.getElementById('nav-user').classList.toggle('hidden', !loggedIn);
+    if (user) {
+      document.getElementById('nav-avatar').textContent = user.username[0];
+      document.getElementById('nav-username').textContent = user.username;
+    }
+  }
+
+  async function loadChannels(liveOnly = false) {
+    const grid = document.getElementById('channel-grid');
+    grid.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading...</div></div>`;
+    try {
+      const channels = liveOnly ? await api.listLiveChannels() : await api.listChannels();
+      if (!channels.length) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">${liveOnly ? '📺' : '🎙'}</div>
+            <div class="empty-title">${liveOnly ? 'No live streams right now' : 'No channels yet'}</div>
+            <div class="empty-sub">${liveOnly ? 'Check back soon!' : 'Be the first to go live!'}</div>
+          </div>`;
+        return;
+      }
+      grid.innerHTML = channels.map(ch => {
+        const grad = channelGradient(ch.name);
+        const initial = ch.name[0].toUpperCase();
+        return `
+          <div class="channel-card" onclick="location.href='/app/watch.html?id=${ch.id}'">
+            <div class="channel-thumb" style="background:${grad}">
+              <span class="thumb-initial">${initial}</span>
+              ${ch.is_live ? '<span class="badge-live">Live</span>' : ''}
+              ${ch.is_live ? `<span class="thumb-viewers">👁 ${ch.viewer_count}</span>` : ''}
+            </div>
+            <div class="channel-info">
+              <div class="channel-name">${escHtml(ch.name)}</div>
+              <div class="channel-meta">${ch.description ? escHtml(ch.description) : (ch.is_live ? 'Streaming now' : 'Offline')}</div>
+            </div>
+          </div>`;
+      }).join('');
+    } catch (e) {
+      grid.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Failed to load channels</div></div>`;
+    }
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function switchTab(tab) {
+    document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('form-register').classList.toggle('hidden', tab !== 'register');
+    document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+    document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  }
+
+  function closeModal() {
+    document.getElementById('auth-modal').classList.add('hidden');
+  }
+
+  document.getElementById('login-btn').onclick = () => {
+    document.getElementById('auth-modal').classList.remove('hidden');
+  };
+
+  document.getElementById('logout-btn').onclick = () => api.logout();
+
+  document.getElementById('do-login').onclick = async () => {
+    const btn = document.getElementById('do-login');
+    btn.disabled = true; btn.textContent = 'Signing in...';
+    try {
+      await api.login(
+        document.getElementById('login-username').value,
+        document.getElementById('login-password').value,
+      );
+      closeModal();
+      updateNav();
+      toast('Welcome back!', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sign In';
+    }
+  };
+
+  document.getElementById('do-register').onclick = async () => {
+    const btn = document.getElementById('do-register');
+    btn.disabled = true; btn.textContent = 'Creating...';
+    try {
+      await api.register(
+        document.getElementById('reg-username').value,
+        document.getElementById('reg-email').value,
+        document.getElementById('reg-password').value,
+      );
+      await api.login(
+        document.getElementById('reg-username').value,
+        document.getElementById('reg-password').value,
+      );
+      closeModal();
+      updateNav();
+      toast('Account created!', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create Account';
+    }
+  };
+
+  document.getElementById('go-live-btn').onclick = (e) => {
+    if (!api.isLoggedIn()) {
+      e.preventDefault();
+      document.getElementById('auth-modal').classList.remove('hidden');
+    }
+  };
+
+  document.getElementById('filter-all').onclick = () => {
+    showingLive = false;
+    document.getElementById('filter-all').classList.add('active');
+    document.getElementById('filter-live').classList.remove('active');
+    loadChannels(false);
+  };
+  document.getElementById('filter-live').onclick = () => {
+    showingLive = true;
+    document.getElementById('filter-live').classList.add('active');
+    document.getElementById('filter-all').classList.remove('active');
+    loadChannels(true);
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  updateNav();
+  loadChannels();
+</script>
+</body>
+</html>
