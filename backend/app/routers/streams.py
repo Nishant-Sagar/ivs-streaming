@@ -7,6 +7,7 @@ from ..database import get_db
 from ..models.user import User
 from ..models.channel import Channel
 from ..core.security import get_current_user
+from ..config import settings
 from ..core.exceptions import NotFoundError, ForbiddenError, AWSError
 from ..services.ivs import ivs_service
 
