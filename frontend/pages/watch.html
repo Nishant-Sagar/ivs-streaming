@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Watch — StreamSpace</title>
+  <title>Watch Live</title>
   <link rel="stylesheet" href="/static/css/main.css">
   <script src="https://player.live-video.net/1.26.0/amazon-ivs-player.min.js"></script>
 </head>
@@ -15,228 +15,64 @@
 
 <div class="container page">
   <div class="watch-layout">
-    <!-- Left: video + meta -->
     <div>
       <div class="video-wrapper">
         <video id="video-player" playsinline autoplay muted></video>
-        <div class="offline-overlay" id="offline-overlay" style="display:none">
+        <div class="offline-overlay" id="offline-overlay">
           <div class="offline-icon">📡</div>
           <div class="offline-text">Stream is offline</div>
         </div>
       </div>
-
       <div class="stream-meta">
-        <div class="streamer-avatar" id="streamer-avatar" style="background:var(--gradient)">?</div>
+        <div class="streamer-avatar" id="streamer-avatar" style="background:var(--gradient)">📡</div>
         <div>
-          <div class="flex items-center gap-2" style="flex-wrap:wrap">
-            <span class="streamer-name" id="channel-name">Loading...</span>
-            <span id="live-badge" class="hidden"></span>
-            <span class="text-muted text-xs" id="viewer-count"></span>
+          <div class="flex items-center gap-2">
+            <span class="streamer-name">Live Stream</span>
+            <span class="badge-live" id="live-badge" style="display:none">LIVE</span>
           </div>
-          <div class="streamer-desc" id="channel-desc"></div>
+          <div class="streamer-desc text-muted text-sm" id="status-text">Connecting to stream...</div>
         </div>
       </div>
     </div>
 
-    <!-- Right: chat -->
     <div class="chat-panel">
-      <div class="chat-header">
-        <span>💬 Live Chat</span>
-        <span class="text-xs text-dim" id="chat-status">connecting…</span>
-      </div>
+      <div class="chat-header"><span>💬 Chat</span></div>
       <div class="chat-messages" id="chat-messages">
-        <div class="chat-msg system">Joining chat room...</div>
-      </div>
-      <div class="chat-input-row hidden" id="chat-input-row">
-        <input class="form-input" id="chat-input" type="text" placeholder="Send a message…" maxlength="500" autocomplete="off">
-        <button class="btn btn-primary btn-sm" id="send-btn">Send</button>
-      </div>
-      <div class="chat-login-prompt" id="chat-login-prompt">
-        <a href="#" onclick="window.location.href='/app/index.html'" style="color:var(--primary-light)">Sign in to chat</a>
+        <div class="chat-msg system">Chat is not available in this mode.</div>
       </div>
     </div>
   </div>
 </div>
 
 <div id="toast"></div>
-<script src="/static/js/api.js"></script>
 <script src="/static/js/player.js"></script>
-<script src="/static/js/chat.js"></script>
 <script>
-  const params = new URLSearchParams(location.search);
-  const channelId = parseInt(params.get('id'));
-  let playerMgr = null;
-  let statusInterval = null;
+  const playbackUrl = new URLSearchParams(location.search).get('playback');
 
-  const CHAT_COLORS = ['#bf94ff','#ff7aff','#57bee6','#62df65','#ffd16e','#ff9e6e','#f76e6e','#6ebfff','#a8e6cf','#ffaaa5'];
-  const GRADIENTS = [
-    ['#9147ff','#e040fb'],['#00b4d8','#48cae4'],['#f72585','#b5179e'],
-    ['#06d6a0','#118ab2'],['#ffd166','#ef476f'],['#e63946','#457b9d'],
-    ['#7209b7','#3a0ca3'],['#f77f00','#fcbf49'],
-  ];
-
-  function nameHash(name) {
-    let h = 0;
-    for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) & 0x7fffffff;
-    return h;
-  }
-
-  function chatColor(name) { return CHAT_COLORS[nameHash(name) % CHAT_COLORS.length]; }
-  function avatarGradient(name) {
-    const [c1, c2] = GRADIENTS[nameHash(name) % GRADIENTS.length];
-    return `linear-gradient(135deg, ${c1}, ${c2})`;
-  }
-
-  function toast(msg, type = '') {
-    const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.className = `show ${type}`;
-    setTimeout(() => el.className = '', 3000);
-  }
-
-  function addChatMessage(msg) {
-    const box = document.getElementById('chat-messages');
-    const el = document.createElement('div');
-    el.className = 'chat-msg';
-    el.innerHTML = `<span class="sender" style="color:${chatColor(msg.username)}">${escHtml(msg.username)}</span><span style="color:var(--text-dim)">: </span><span>${escHtml(msg.content)}</span>`;
-    box.appendChild(el);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function systemMsg(text) {
-    const box = document.getElementById('chat-messages');
-    const el = document.createElement('div');
-    el.className = 'chat-msg system';
-    el.textContent = text;
-    box.appendChild(el);
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  async function initPage() {
-    const directPlayback = params.get('playback');
-
-    // Direct playback URL — no DB needed (guest streams)
-    if (directPlayback) {
-      document.title = 'Live Stream — StreamSpace';
-      document.getElementById('channel-name').textContent = 'Live Stream';
-      document.getElementById('channel-desc').textContent = '';
-      document.getElementById('streamer-avatar').textContent = '📡';
-      document.getElementById('streamer-avatar').style.background = 'var(--gradient)';
-      document.getElementById('live-badge').className = 'badge-live';
-      document.getElementById('live-badge').textContent = 'LIVE';
-      document.getElementById('offline-overlay').style.display = 'none';
-      document.getElementById('chat-messages').innerHTML = '<div class="chat-msg system">Chat not available for guest streams</div>';
-      initPlayer(directPlayback);
-      return;
-    }
-
-    if (!channelId) { location.href = '/app/index.html'; return; }
-
-    try {
-      const channel = await api.getChannel(channelId);
-      document.title = `${channel.name} — StreamSpace`;
-      document.getElementById('channel-name').textContent = channel.name;
-      document.getElementById('channel-desc').textContent = channel.description || '';
-
-      const avatar = document.getElementById('streamer-avatar');
-      avatar.textContent = channel.name[0].toUpperCase();
-      avatar.style.background = avatarGradient(channel.name);
-
-      const status = await api.getStreamStatus(channelId);
-      updateStreamStatus(status);
-
-      if (status.playback_url) initPlayer(status.playback_url);
-    } catch (e) {
-      toast('Failed to load channel', 'error');
-    }
-
-    statusInterval = setInterval(async () => {
-      try { updateStreamStatus(await api.getStreamStatus(channelId)); } catch (_) {}
-    }, 15000);
-
-    if (api.isLoggedIn()) {
-      document.getElementById('chat-input-row').classList.remove('hidden');
-      document.getElementById('chat-login-prompt').style.display = 'none';
-      initChat();
-    } else {
-      document.getElementById('chat-messages').innerHTML = '<div class="chat-msg system">Sign in to participate in chat</div>';
-    }
-  }
-
-  function updateStreamStatus(status) {
-    const badge = document.getElementById('live-badge');
-    const viewers = document.getElementById('viewer-count');
-    const overlay = document.getElementById('offline-overlay');
-
-    if (status.is_live) {
-      badge.className = 'badge-live';
-      badge.textContent = 'LIVE';
-      viewers.textContent = `${status.viewer_count} watching`;
-      overlay.style.display = 'none';
-    } else {
-      badge.className = 'hidden';
-      viewers.textContent = 'Offline';
-      overlay.style.display = 'flex';
-    }
-  }
-
-  function initPlayer(playbackUrl) {
-    if (playerMgr) playerMgr.destroy();
-    playerMgr = new IVSPlayerManager(document.getElementById('video-player'));
-    playerMgr.onStateChange = (state) => {
-      document.getElementById('offline-overlay').style.display =
-        (state === 'ended' || state === 'error') ? 'flex' : 'none';
+  if (!playbackUrl) {
+    document.getElementById('status-text').textContent = 'Missing ?playback= parameter.';
+  } else {
+    const mgr = new IVSPlayerManager(document.getElementById('video-player'));
+    mgr.onStateChange = (state) => {
+      const overlay = document.getElementById('offline-overlay');
+      const badge   = document.getElementById('live-badge');
+      const text    = document.getElementById('status-text');
+      if (state === 'playing') {
+        overlay.style.display = 'none';
+        badge.style.display = '';
+        text.textContent = 'Live now';
+      } else if (state === 'buffering') {
+        text.textContent = 'Buffering...';
+      } else {
+        overlay.style.display = 'flex';
+        badge.style.display = 'none';
+        text.textContent = 'Stream is offline or ended';
+      }
     };
-    playerMgr.init(playbackUrl).catch(e => console.error('Player init error:', e));
+    mgr.init(playbackUrl).catch(e => {
+      document.getElementById('status-text').textContent = 'Player error: ' + e.message;
+    });
   }
-
-  async function initChat() {
-    try {
-      const tokenData = await api.getChatToken(channelId);
-      chat.onConnect = () => {
-        document.getElementById('chat-messages').innerHTML = '';
-        document.getElementById('chat-status').textContent = 'connected';
-        systemMsg('Welcome to the chat! 👋');
-      };
-      chat.onMessage = addChatMessage;
-      chat.onDisconnect = () => {
-        document.getElementById('chat-status').textContent = 'reconnecting…';
-        systemMsg('Chat disconnected. Reconnecting...');
-      };
-      chat.connect(tokenData.token, tokenData.region);
-    } catch (e) {
-      systemMsg('Chat unavailable');
-    }
-  }
-
-  function sendMessage() {
-    const input = document.getElementById('chat-input');
-    const text = input.value.trim();
-    if (!text) return;
-    chat.sendMessage(text);
-    input.value = '';
-  }
-
-  document.getElementById('send-btn').onclick = sendMessage;
-  document.getElementById('chat-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') sendMessage();
-  });
-
-  document.getElementById('video-player').addEventListener('click', (e) => {
-    e.target.muted = false;
-  });
-
-  window.addEventListener('beforeunload', () => {
-    clearInterval(statusInterval);
-    chat.disconnect();
-    if (playerMgr) playerMgr.destroy();
-  });
-
-  initPage();
 </script>
 </body>
 </html>

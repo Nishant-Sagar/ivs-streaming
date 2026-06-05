@@ -17,14 +17,6 @@ router = APIRouter(prefix="/api/streams", tags=["streams"])
 @router.post("/guest")
 def create_guest_stream():
     """Return IVS stream credentials — instant if pre-provisioned via env vars."""
-    if settings.ivs_ingest_endpoint and settings.ivs_stream_key:
-        return {
-            "channel_arn": settings.ivs_channel_arn,
-            "ingest_endpoint": settings.ivs_ingest_endpoint,
-            "stream_key": settings.ivs_stream_key,
-            "playback_url": settings.ivs_playback_url,
-            "rtmps_url": f"rtmps://{settings.ivs_ingest_endpoint}:443/app/{settings.ivs_stream_key}",
-        }
     name = f"guest-{uuid.uuid4().hex[:8]}"
     try:
         ivs_data = ivs_service.create_channel(name=name)

@@ -17,7 +17,6 @@
 <div class="container page">
   <div class="stream-layout">
 
-    <!-- Preview -->
     <div>
       <video id="broadcast-preview" playsinline autoplay muted></video>
       <div class="flex gap-2 mt-3" style="flex-wrap:wrap">
@@ -25,13 +24,11 @@
         <button class="btn btn-danger btn-lg hidden" id="stop-btn">⏹ End Stream</button>
         <button class="btn btn-ghost btn-sm hidden" id="flip-btn">🔄 Flip</button>
       </div>
-      <p class="text-dim text-sm mt-2" id="hint">Start your camera to preview before going live.</p>
+      <p class="text-dim text-sm mt-2" id="hint">Setting up your stream...</p>
     </div>
 
-    <!-- Controls -->
     <div class="stream-controls">
 
-      <!-- Status -->
       <div>
         <div class="status-pill" id="status-pill">
           <div class="dot" id="status-dot"></div>
@@ -39,41 +36,6 @@
         </div>
       </div>
 
-      <!-- Stream setup -->
-      <div class="card">
-        <div class="card-header">Stream Setup</div>
-
-        <div id="no-channel-notice" class="hidden"></div>
-
-        <div id="channel-info" class="hidden">
-          <div class="form-group">
-            <label class="form-label">Channel</label>
-            <div class="text-sm font-bold" id="channel-name-display" style="padding:6px 0"></div>
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label class="form-label">Stream Title</label>
-            <input class="form-input" id="stream-title" type="text" placeholder="What are you streaming?">
-          </div>
-        </div>
-      </div>
-
-      <!-- Camera picker (desktop only) -->
-      <div class="card" id="camera-settings-card">
-        <div class="card-header">Camera</div>
-        <select class="form-input" id="video-device-select">
-          <option value="">Detecting devices...</option>
-        </select>
-      </div>
-
-      <!-- Phone QR card (desktop only) -->
-      <div class="card" id="mobile-qr-card">
-        <div class="card-header">Stream from Phone</div>
-        <p class="text-muted text-sm mb-3">Scan with your phone to open this page:</p>
-        <div id="qr-container" style="background:#fff;border-radius:8px;padding:10px;width:fit-content;margin:0 auto"></div>
-        <p class="text-dim mt-2 text-center" id="phone-url" style="word-break:break-all;font-size:11px;font-family:monospace"></p>
-      </div>
-
-      <!-- Watch link -->
       <div class="card hidden" id="watch-link-card">
         <div class="card-header">🔗 Share with Viewers</div>
         <p class="text-muted text-sm mb-3">Send this link to people who want to watch:</p>
@@ -83,7 +45,20 @@
         </div>
       </div>
 
-      <!-- RTMPS credentials -->
+      <div class="card" id="camera-settings-card">
+        <div class="card-header">Camera</div>
+        <select class="form-input" id="video-device-select">
+          <option value="">Detecting devices...</option>
+        </select>
+      </div>
+
+      <div class="card" id="mobile-qr-card">
+        <div class="card-header">Stream from Phone</div>
+        <p class="text-muted text-sm mb-3">Scan to open this page on your phone:</p>
+        <div id="qr-container" style="background:#fff;border-radius:8px;padding:10px;width:fit-content;margin:0 auto"></div>
+        <p class="text-dim mt-2 text-center" id="phone-url" style="word-break:break-all;font-size:11px;font-family:monospace"></p>
+      </div>
+
       <div class="card">
         <div class="card-header">OBS / Mobile Apps</div>
         <p class="text-muted text-sm mb-3">Use in any RTMP-compatible app:</p>
@@ -91,7 +66,7 @@
           <label class="form-label">RTMPS URL</label>
           <div class="key-box">
             <span class="key-value" id="rtmps-url">—</span>
-            <button class="btn btn-ghost btn-sm" onclick="copyText('rtmps-url')">Copy</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyVal('rtmps-url')">Copy</button>
           </div>
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -99,7 +74,7 @@
           <div class="key-box">
             <span class="key-value" id="stream-key-display">••••••••</span>
             <button class="btn btn-ghost btn-sm" id="reveal-key">Show</button>
-            <button class="btn btn-ghost btn-sm" onclick="copyText('stream-key-display')">Copy</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyVal('stream-key-display', true)">Copy</button>
           </div>
         </div>
       </div>
@@ -109,18 +84,16 @@
 </div>
 
 <div id="toast"></div>
-<script src="/static/js/api.js"></script>
 <script src="/static/js/broadcaster.js"></script>
 <script>
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  let channel = null;
-  let streamKeyData = null;
+  const previewEl = document.getElementById('broadcast-preview');
+  previewEl.classList.add(isMobile ? 'mobile-preview' : 'desktop-preview');
+
   let rawStreamKey = '';
   let keyRevealed = false;
   let keyRevealTimer = null;
-
-  const previewEl = document.getElementById('broadcast-preview');
-  previewEl.classList.add(isMobile ? 'mobile-preview' : 'desktop-preview');
+  let guestChannelArn = null;
 
   function toast(msg, type = '') {
     const el = document.getElementById('toast');
@@ -130,64 +103,61 @@
   }
 
   function setStatus(state) {
-    const dot = document.getElementById('status-dot');
-    const text = document.getElementById('status-text');
-    const pill = document.getElementById('status-pill');
-    dot.className = `dot ${state}`;
     const labels = { live: '🔴 LIVE', connecting: 'Connecting...', '': 'Not streaming' };
-    text.textContent = labels[state] ?? state;
-    pill.style.borderColor = state === 'live' ? 'var(--live)' : 'var(--border)';
+    document.getElementById('status-dot').className = `dot ${state}`;
+    document.getElementById('status-text').textContent = labels[state] ?? state;
+    document.getElementById('status-pill').style.borderColor = state === 'live' ? 'var(--live)' : 'var(--border)';
   }
 
-  let guestChannelArn = null;
-
   async function loadChannel() {
-    document.getElementById('hint').textContent = 'Setting up your stream...';
     try {
       const res = await fetch('/api/streams/guest', { method: 'POST' });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${res.status}`);
-      }
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+
       guestChannelArn = data.channel_arn;
       rawStreamKey = data.stream_key;
+      window._ingestEndpoint = data.ingest_endpoint;
 
-      document.getElementById('no-channel-notice').classList.add('hidden');
-      document.getElementById('channel-info').classList.remove('hidden');
-      document.getElementById('channel-name-display').textContent = 'Your Stream';
       document.getElementById('start-btn').disabled = false;
       document.getElementById('hint').textContent = 'Start your camera to preview before going live.';
       document.getElementById('rtmps-url').textContent = data.rtmps_url;
 
-      // show shareable watch link
       const watchUrl = `${location.origin}/app/watch.html?playback=${encodeURIComponent(data.playback_url)}`;
       document.getElementById('watch-link').href = watchUrl;
       document.getElementById('watch-link').textContent = watchUrl;
       document.getElementById('watch-link-card').classList.remove('hidden');
 
-      // save ingest endpoint for broadcaster
-      window._ingestEndpoint = data.ingest_endpoint;
+      if (!isMobile) setupQR();
+      else {
+        document.getElementById('flip-btn').classList.remove('hidden');
+        document.getElementById('camera-settings-card').style.display = 'none';
+        document.getElementById('mobile-qr-card').style.display = 'none';
+      }
     } catch (e) {
       document.getElementById('hint').textContent = 'Setup failed: ' + e.message;
       toast('Setup failed: ' + e.message, 'error');
     }
   }
 
+  function setupQR() {
+    const url = window.location.href;
+    document.getElementById('phone-url').textContent = url;
+    new QRCode(document.getElementById('qr-container'), {
+      text: url, width: 140, height: 140,
+      colorDark: '#000000', colorLight: '#ffffff',
+    });
+  }
+
   async function populateDevices() {
-    if (!isMobile) {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const select = document.getElementById('video-device-select');
-        const videoDevices = devices.filter(d => d.kind === 'videoinput');
-        select.innerHTML = videoDevices.map(d =>
-          `<option value="${d.deviceId}">${d.label || 'Camera ' + d.deviceId.slice(0,8)}</option>`
-        ).join('');
-      } catch (_) {}
-    } else {
-      document.getElementById('flip-btn').classList.remove('hidden');
-      document.getElementById('camera-settings-card').style.display = 'none';
-    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const sel = document.getElementById('video-device-select');
+      const cams = devices.filter(d => d.kind === 'videoinput');
+      sel.innerHTML = cams.map(d =>
+        `<option value="${d.deviceId}">${d.label || 'Camera ' + d.deviceId.slice(0,8)}</option>`
+      ).join('');
+    } catch (_) {}
   }
 
   document.getElementById('start-btn').onclick = async () => {
@@ -197,16 +167,13 @@
     try {
       await broadcaster.setup(previewEl, window._ingestEndpoint);
       await populateDevices();
-
       broadcaster.onStatusChange = (state) => {
         if (state === 'connected') setStatus('live');
         else if (state === 'disconnecting') setStatus('');
       };
-
       btn.classList.add('hidden');
       document.getElementById('stop-btn').classList.remove('hidden');
       document.getElementById('hint').textContent = 'Looking good? Hit "Go Live" when ready.';
-
       const goLiveBtn = document.createElement('button');
       goLiveBtn.className = 'btn btn-primary btn-lg';
       goLiveBtn.id = 'go-live-btn';
@@ -222,18 +189,18 @@
   };
 
   async function startBroadcast() {
-    const goLiveBtn = document.getElementById('go-live-btn');
-    if (goLiveBtn) { goLiveBtn.disabled = true; goLiveBtn.textContent = 'Connecting...'; }
+    const btn = document.getElementById('go-live-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Connecting...'; }
     setStatus('connecting');
     try {
       await broadcaster.startBroadcast(rawStreamKey);
-      if (goLiveBtn) goLiveBtn.classList.add('hidden');
+      if (btn) btn.classList.add('hidden');
       setStatus('live');
       toast('You are live! 🎉', 'success');
     } catch (e) {
-      if (goLiveBtn) { goLiveBtn.disabled = false; goLiveBtn.textContent = '🎙 Go Live'; }
+      if (btn) { btn.disabled = false; btn.textContent = '🎙 Go Live'; }
       setStatus('');
-      toast('Failed to start stream: ' + e.message, 'error');
+      toast('Failed to start: ' + e.message, 'error');
     }
   }
 
@@ -263,31 +230,14 @@
     }
   };
 
-  function copyText(elId) {
-    const el = document.getElementById(elId);
-    const text = el.id === 'stream-key-display' ? rawStreamKey : el.textContent;
+  function copyVal(elId, useRaw = false) {
+    const text = useRaw ? rawStreamKey : document.getElementById(elId).textContent;
     navigator.clipboard.writeText(text).then(() => toast('Copied!', 'success'));
-  }
-
-  async function setupMobileQR() {
-    if (isMobile) {
-      document.getElementById('mobile-qr-card').style.display = 'none';
-      return;
-    }
-    const url = window.location.origin + '/app/stream.html';
-    document.getElementById('phone-url').textContent = url;
-    new QRCode(document.getElementById('qr-container'), {
-      text: url,
-      width: 140, height: 140,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-    });
   }
 
   window.addEventListener('beforeunload', () => broadcaster.destroy());
 
   loadChannel();
-  setupMobileQR();
 </script>
 </body>
 </html>
